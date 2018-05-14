@@ -1,59 +1,65 @@
-import numpy as np
-import matplotlib.pyplot as plt
+import requests
+import re
+from lxml import etree
 
-from sklearn.decomposition import PCA, KernelPCA
-from sklearn.datasets import make_circles
 
-np.random.seed(0)
+class StockCode(object):
+    def __init__(self):
+        self.start_url = "http://quote.eastmoney.com/stocklist.html#sh"
+        self.headers = {
+            "User-Agent": ":Mozilla/5.0 (Windows NT 6.1; WOW64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36"
+        }
 
-X, y = make_circles(n_samples=1000, factor=.3, noise=.1)
+    def parse_url(self):
+        response = requests.get(self.start_url, headers=self.headers)
+        if response.status_code == 200:
+            return etree.HTML(response.content)
 
-kpca = KernelPCA(kernel="rbf", fit_inverse_transform=True, gamma = 2)
-X_kpca = kpca.fit_transform(X)
-X_back = kpca.inverse_transform(X_kpca)
-pca = PCA()
-X_pca = pca.fit_transform(X)
+    def get_code_list(self, response):
+        node_list = response.xpath('//*[@id="quotesearch"]/ul[1]/li')
+        code_list = []
+        for node in node_list:
+            try:
+                code = re.match(r'.*?\((\d+)\)', etree.tostring(node).decode()).group(1)
+                code_list.append(code)
+            except:
+                continue
+        return code_list
 
-# Plot results
+    def run(self):
+        html = self.parse_url()
+        return self.get_code_list(html)
 
-plt.figure(figsize = (20,20))
-plt.subplot(2, 2, 1, aspect='equal')
-plt.title("Original space")
-blues = y == 0
-reds = y == 1
 
-plt.scatter(X[reds, 0], X[reds, 1], c="red",
-            s=30, edgecolor='k')
-plt.scatter(X[blues, 0], X[blues, 1], c="blue",
-            s=30, edgecolor='k')
-plt.xlabel("$x_1$")
-plt.ylabel("$x_2$")
+class DownloadStock(object):
+    def __init__(self, code):
+        self.code = code
+        self.start_url = "http://quotes.money.163.com/trade/lsjysj_" + self.code + ".html"
+        self.headers = {
+            "User-Agent": ":Mozilla/5.0 (Windows NT 6.1; WOW64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36"
+        }
 
-plt.subplot(2, 2, 2, aspect='equal')
-plt.scatter(X_pca[reds, 0], X_pca[reds, 1], c="red",
-            s=30, edgecolor='k')
-plt.scatter(X_pca[blues, 0], X_pca[blues, 1], c="blue",
-            s=30, edgecolor='k')
-plt.title("Projection by PCA")
-plt.xlabel("1st principal component")
-plt.ylabel("2nd component")
+    def download(self, start_date, end_date):
+        print('Now downloading stock code:', self.code)
+        download_url = "http://quotes.money.163.com/service/chddata.html?code=0" \
+                       + self.code + "&start=" + start_date + "&end=" + end_date \
+                       + "&fields=TCLOSE;HIGH;LOW;TOPEN;LCLOSE;CHG;PCHG;TURNOVER;VOTURNOVER;VATURNOVER;TCAP;MCAP"
+        data = requests.get(download_url)
+        title = 'D:/data/' + self.code + '.csv'  # SET DOWNLOAD PATH AND FILE NAME
+        f = open(title, 'wb')
+        for chunk in data.iter_content(chunk_size=10000):
+            if chunk:
+                f.write(chunk)
+        f.close()
+        print('Download completed')
 
-plt.subplot(2, 2, 3, aspect='equal')
-plt.scatter(X_kpca[reds, 0], X_kpca[reds, 1], c="red",
-            s=30, edgecolor='k')
-plt.scatter(X_kpca[blues, 0], X_kpca[blues, 1], c="blue",
-            s=30, edgecolor='k')
-plt.title("Projection by KPCA")
-plt.xlabel("1st principal component in space induced by $\phi$")
-plt.ylabel("2nd component")
 
-plt.subplot(2, 2, 4, aspect='equal')
-plt.scatter(X_back[reds, 0], X_back[reds, 1], c="red",
-            s=30, edgecolor='k')
-plt.scatter(X_back[blues, 0], X_back[blues, 1], c="blue",
-            s=30, edgecolor='k')
-plt.title("Original space after inverse transform")
-plt.xlabel("$x_1$")
-plt.ylabel("$x_2$")
-plt.savefig('D:/Work/KernelPCA.png')
-plt.show()
+code = StockCode()
+code_list = code.run()
+code_list_sz = [code for code in code_list if 600000 <= int(code) <= 609999]  # Get stock codes start with '60'
+for code in code_list_sz:
+    download = DownloadStock(code)
+    download.download('20170101', '20171231')  # Set download date
+
