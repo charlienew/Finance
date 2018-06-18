@@ -5,4 +5,4 @@ This is a experimental repo for the project of Financial Statistics
     Data extracted from http://quotes.money.163.com/
     Python crawler code
     Notebooks  
-    LSTM experiments for time series forecasting
+    LSTM experiments for time series forecasting (Still working on it...)
